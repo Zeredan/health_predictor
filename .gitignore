@@ -1,0 +1,61 @@
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# Data files (большие файлы)
+*.tsv
+*.csv
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+*.pth
+*.pt
+*.ckpt
+
+# Models and checkpoints
+res/train_state/
+res/models/
+*.pkl
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+.coverage
+.tox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Logs
+*.log

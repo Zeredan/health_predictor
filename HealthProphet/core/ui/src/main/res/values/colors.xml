@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Light Theme (Основные цвета) -->
+    <color name="light_bg_primary">#FFFFFFFF</color> <!-- Чисто белый фон -->
+    <color name="light_text_primary">#FF1D1B20</color> <!-- Почти чёрный для основного текста -->
+    <color name="light_text_secondary">#FF49454F</color> <!-- Тёмно-серый для второстепенного текста -->
+    <color name="light_text_error">#FFBA1A1A</color> <!-- Яркий красный для ошибок -->
+
+    <!-- Navigation -->
+    <color name="light_navigation_bg">#FFF2F5FA</color> <!-- Очень светлый синевато-серый фон навигации -->
+    <color name="light_navigation_bg_selected">#FFD0E2FF</color> <!-- Светло-синий для выбранного пункта -->
+    <color name="light_navigation_bg_selected_text">#FF1D1B20</color> <!-- Тёмный текст на выбранном пункте -->
+
+    <!-- TextField -->
+    <color name="light_text_field_bg_focused">#FFF2F5FA</color> <!-- Светло-синий фон при фокусе -->
+    <color name="light_text_field_bg_unfocused">#FFFAFAFA</color> <!-- Почти белый фон для неактивного поля -->
+    <color name="light_text_field_border_focused">#FF1976D2</color> <!-- Насыщенный синий для рамки при фокусе -->
+    <color name="light_text_field_border_unfocused">#FFC2C2C2</color> <!-- Светло-серая рамка -->
+    <color name="light_text_field_cursor">#FF1976D2</color> <!-- Курсор того же цвета, что и рамка -->
+
+    <!-- Switch -->
+    <color name="light_switch_checked_thumb">#FF1976D2</color> <!-- Синий бегунок, когда включён -->
+    <color name="light_switch_unchecked_thumb">#FF9E9E9E</color> <!-- Серый бегунок, когда выключен -->
+    <color name="light_switch_checked_track">#FFBBDEFB</color> <!-- Очень светлый синий трек, когда включён -->
+    <color name="light_switch_unchecked_track">#FFE0E0E0</color> <!-- Светло-серый трек, когда выключен -->
+
+    <!-- Buttons & Progress -->
+    <color name="light_load_button">#FF1976D2</color> <!-- Основной синий цвет кнопки -->
+    <color name="light_progress_bar">#FF2196F3</color> <!-- Чуть более яркий синий для прогресс-бара (для разнообразия) -->
+
+    <!-- Other -->
+    <color name="light_text_table_header">#FF49454F</color> <!-- Тёмно-серый для заголовков таблиц -->
+    <color name="light_border_primary">#FFBDBDBD</color> <!-- Цвет границ (светло-серый) -->
+
+    <!-- Dark Theme (Основные цвета) -->
+    <color name="dark_bg_primary">#FF1C1B1F</color> <!-- Очень тёмный, почти чёрный фон -->
+    <color name="dark_text_primary">#FFE6E1E6</color> <!-- Светло-серый для основного текста -->
+    <color name="dark_text_secondary">#FFCCC2CF</color> <!-- Серый для второстепенного текста -->
+    <color name="dark_text_error">#FFFFB4AB</color> <!-- Мягкий красный для ошибок -->
+
+    <!-- Navigation -->
+    <color name="dark_navigation_bg">#FF263238</color> <!-- Тёмный сине-серый фон навигации -->
+    <color name="dark_navigation_bg_selected">#FF37474F</color> <!-- Ещё более тёмный синий для выбранного пункта -->
+    <color name="dark_navigation_bg_selected_text">#FFE6E1E6</color> <!-- Светлый текст на выбранном пункте -->
+
+    <!-- TextField -->
+    <color name="dark_text_field_bg_focused">#FF263238</color> <!-- Тёмный фон при фокусе -->
+    <color name="dark_text_field_bg_unfocused">#FF37474F</color> <!-- Чуть светлее фон, когда не в фокусе -->
+    <color name="dark_text_field_border_focused">#FF90CAF9</color> <!-- Светло-синяя рамка при фокусе -->
+    <color name="dark_text_field_border_unfocused">#FFB0BEC5</color> <!-- Серая рамка -->
+    <color name="dark_text_field_cursor">#FF90CAF9</color> <!-- Курсор цвета рамки -->
+
+    <!-- Switch -->
+    <color name="dark_switch_checked_thumb">#FF90CAF9</color> <!-- Светло-синий бегунок -->
+    <color name="dark_switch_unchecked_thumb">#FFB0BEC5</color> <!-- Серый бегунок -->
+    <color name="dark_switch_checked_track">#FF37474F</color> <!-- Тёмный трек, когда включён -->
+    <color name="dark_switch_unchecked_track">#FF455A64</color> <!-- Тёмно-серый трек, когда выключен -->
+
+    <!-- Buttons & Progress -->
+    <color name="dark_load_button">#FF90CAF9</color> <!-- Светло-синяя кнопка на тёмном фоне -->
+    <color name="dark_progress_bar">#FF90CAF9</color> <!-- Прогресс-бар того же светло-синего цвета (можно использовать #FF64B5F6 для отличия) -->
+
+    <!-- Other -->
+    <color name="dark_text_table_header">#FFCCC2CF</color> <!-- Серый для заголовков таблиц -->
+    <color name="dark_border_primary">#FFB0BEC5</color> <!-- Цвет границ (светло-серый на тёмном фоне) -->
+</resources>
