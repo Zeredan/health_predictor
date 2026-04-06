@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Dict, Any, Tuple, Optional
 import json
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -307,6 +308,77 @@ def clear_training_state(model_name: str = "model") -> bool:
     except Exception as e:
         logger.error(f"Ошибка при удалении состояния: {e}")
         return False
+
+
+def save_epoch_metrics(epoch: int, train_loss: float, val_metrics: Dict[str, float], 
+                       epoch_time: float, is_best: bool, save_dir: Path):
+    """Сохраняет метрики эпохи в JSON файл"""
+    save_dir.mkdir(parents=True, exist_ok=True)
+    
+    metrics_file = save_dir / "training_metrics.json"
+    
+    epoch_data = {
+        'epoch': epoch,
+        'train_loss': train_loss,
+        'val_loss': val_metrics.get('loss', 0),
+        'epoch_time_seconds': epoch_time,
+        'is_best': is_best,
+        'timestamp': datetime.now().isoformat(),
+        'metrics': val_metrics
+    }
+    
+    if metrics_file.exists():
+        with open(metrics_file, 'r', encoding='utf-8') as f:
+            all_metrics = json.load(f)
+    else:
+        all_metrics = []
+    
+    all_metrics.append(epoch_data)
+    
+    with open(metrics_file, 'w', encoding='utf-8') as f:
+        json.dump(all_metrics, f, indent=2, ensure_ascii=False)
+    
+    summary_file = save_dir / "latest_summary.txt"
+    with open(summary_file, 'w', encoding='utf-8') as f:
+        f.write("="*70 + "\n")
+        f.write(f"EPOCH {epoch:03d} SUMMARY | Time: {epoch_time:.1f}s\n")
+        f.write("="*70 + "\n")
+        f.write(f"Train Loss: {train_loss:.4f} | Val Loss: {val_metrics.get('loss', 0):.4f}\n\n")
+        
+        if 'age_mae' in val_metrics:
+            f.write(f"Age Metrics:\n")
+            f.write(f"  MAE: {val_metrics['age_mae']:.4f}\n")
+            f.write(f"  MSE: {val_metrics.get('age_mse', 0):.4f}\n")
+            f.write(f"  R2: {val_metrics.get('age_r2', 0):.4f}\n\n")
+        
+        if 'death_recall' in val_metrics:
+            f.write(f"Death Metrics:\n")
+            f.write(f"  Accuracy: {val_metrics.get('death_accuracy', 0):.4f}\n")
+            f.write(f"  Precision: {val_metrics.get('death_precision', 0):.4f}\n")
+            f.write(f"  Recall: {val_metrics['death_recall']:.4f}\n")
+            f.write(f"  Specificity: {val_metrics.get('death_specificity', 0):.4f}\n")
+            f.write(f"  F1: {val_metrics.get('death_f1', 0):.4f}\n\n")
+        
+        acc_metrics = []
+        for feat in ['group', 'profile', 'result', 'diagnosis_full', 'service_full']:
+            key = f'{feat}_acc'
+            if key in val_metrics:
+                acc_metrics.append(f"{feat}: {val_metrics[key]:.3f}")
+        
+        if acc_metrics:
+            f.write("Classification Accuracy:\n")
+            for metric in acc_metrics:
+                f.write(f"  {metric}\n")
+        
+        if 'diagnosis_full_top3_acc' in val_metrics:
+            f.write(f"\nTop-3 Accuracy (diagnosis_full): {val_metrics['diagnosis_full_top3_acc']:.4f}\n")
+        
+        if is_best:
+            f.write(f"\n⭐ NEW BEST! Val Loss: {val_metrics.get('loss', 0):.4f}\n")
+        
+        f.write("="*70 + "\n")
+    
+    print(f"  💾 Metrics saved to {metrics_file}")
 
 
 # Пример использования в тренировочном цикле

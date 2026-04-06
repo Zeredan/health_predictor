@@ -22,7 +22,7 @@ from core.model.config import get_model_config
 from core.model.multi_task_loss import SimpleMultiTaskLoss
 from core.utils.handbooks.retrieve_handbooks import aggregate_all_vocabs
 from core.utils.stats.age_stats import get_age_stats
-from core.utils.saved_state.saved_state import save_training_state, load_training_state
+from core.utils.saved_state.saved_state import save_training_state, load_training_state, save_epoch_metrics
 
 
 # Настраиваем окружение
@@ -131,16 +131,27 @@ def initialize_config():
 
 def compute_metrics_fast(predictions: Dict[str, torch.Tensor], 
                         targets: Dict[str, torch.Tensor]) -> Dict[str, float]:
-    """Быстрое вычисление метрик"""
+    """Расширенное вычисление метрик"""
     metrics = {}
     
-    # Возраст - MAE
+    # Возраст - MAE, MSE, R2
     if 'age' in predictions and 'age' in targets:
         with torch.no_grad():
-            age_mae = torch.abs(predictions['age'] - targets['age']).mean().item()
-        metrics['age_mae'] = age_mae
+            age_pred = predictions['age'].squeeze(-1)
+            age_true = targets['age'].squeeze(-1)
+            
+            mae = torch.abs(age_pred - age_true).mean().item()
+            mse = ((age_pred - age_true) ** 2).mean().item()
+            
+            ss_res = ((age_true - age_pred) ** 2).sum().item()
+            ss_tot = ((age_true - age_true.mean()) ** 2).sum().item()
+            r2 = 1 - ss_res / (ss_tot + 1e-10)
+            
+            metrics['age_mae'] = mae
+            metrics['age_mse'] = mse
+            metrics['age_r2'] = r2
     
-    # Смерть - Recall и F1
+    # Смерть - Precision, Recall, F1, Accuracy, Specificity
     if 'death_logits' in predictions and 'is_dead' in targets:
         with torch.no_grad():
             death_probs = torch.sigmoid(predictions['death_logits'].float())
@@ -148,24 +159,28 @@ def compute_metrics_fast(predictions: Dict[str, torch.Tensor],
             death_true = targets['is_dead'].int()
             
             tp = ((death_pred == 1) & (death_true == 1)).sum().item()
+            tn = ((death_pred == 0) & (death_true == 0)).sum().item()
             fp = ((death_pred == 1) & (death_true == 0)).sum().item()
             fn = ((death_pred == 0) & (death_true == 1)).sum().item()
             
             precision = tp / (tp + fp + 1e-10)
             recall = tp / (tp + fn + 1e-10)
+            specificity = tn / (tn + fp + 1e-10)
+            accuracy = (tp + tn) / (tp + tn + fp + fn + 1e-10)
             f1 = 2 * precision * recall / (precision + recall + 1e-10)
             
             metrics['death_precision'] = precision
             metrics['death_recall'] = recall
+            metrics['death_specificity'] = specificity
+            metrics['death_accuracy'] = accuracy
             metrics['death_f1'] = f1
     
-    # Accuracy для ключевых признаков
+    # Accuracy и Weighted Recall для ключевых признаков
     key_features = ['group', 'profile', 'result', 'diagnosis_full', 'service_full']
     for feat in key_features:
         logits_key = f'{feat}_logits'
         if logits_key in predictions and feat in targets:
             with torch.no_grad():
-                # Конвертируем в FP32 для argmax
                 preds = predictions[logits_key].float().argmax(dim=-1)
                 trues = targets[feat]
                 mask = trues != 0
@@ -173,6 +188,20 @@ def compute_metrics_fast(predictions: Dict[str, torch.Tensor],
                 if mask.any():
                     acc = (preds[mask] == trues[mask]).float().mean().item()
                     metrics[f'{feat}_acc'] = acc
+    
+    # Top-3 accuracy для диагнозов
+    if 'diagnosis_full_logits' in predictions and 'diagnosis_full' in targets:
+        with torch.no_grad():
+            logits = predictions['diagnosis_full_logits'].float()
+            trues = targets['diagnosis_full']
+            mask = trues != 0
+            
+            if mask.any():
+                top3_pred = torch.topk(logits, k=min(3, logits.size(-1)), dim=-1).indices
+                trues_masked = trues[mask]
+                top3_matches = torch.stack([(top3_pred[mask] == t).any(dim=-1) for t in trues_masked]).any(dim=0)
+                top3_acc = top3_matches.float().mean().item()
+                metrics['diagnosis_full_top3_acc'] = top3_acc
     
     return metrics
 
@@ -223,6 +252,8 @@ def train_epoch(model, loader, optimizer, loss_fn, device, config, epoch, scaler
                   f"Time: {batch_time:.3f}s | "
                   f"Avg: {avg_batch_time:.3f}s | "
                   f"Scale: {scaler.get_scale():.1f}")  # Показываем scale для отладки
+        #if (batch_idx > 100):
+        #    break
     
     epoch_time = time.time() - epoch_start_time
     avg_loss = total_loss / len(loader)
@@ -231,10 +262,8 @@ def train_epoch(model, loader, optimizer, loss_fn, device, config, epoch, scaler
     
     return avg_loss
 
-
 @torch.no_grad()
 def validate_epoch(model, loader, loss_fn, device, config, epoch):
-    """Одна эпоха валидации"""
     model.eval()
     total_loss = 0.0
     all_metrics = []
@@ -247,20 +276,21 @@ def validate_epoch(model, loader, loss_fn, device, config, epoch):
         target = {k: v.to(device, non_blocking=True) 
                  if torch.is_tensor(v) else v for k, v in batch['target'].items()}
         
-        # ИСПРАВЛЕНО: Новый API AMP
         with torch.amp.autocast('cuda', dtype=config['amp_dtype'], enabled=config['use_amp']):
             predictions = model(window)
             loss, _ = loss_fn(predictions, target)
         
         total_loss += loss.item()
         
-        # Метрики
-        #if batch_idx < 5:
         metrics = compute_metrics_fast(predictions, target)
         all_metrics.append(metrics)
         
         if (batch_idx + 1) % (len(loader) // 4) == 0:
+        #if (batch_idx + 1) % (101 // 4) == 0:
             print(f"  Val batch {batch_idx + 1:4d}/{len(loader)} | Loss: {loss.item():.4f}")
+            #print(f"  Val batch {batch_idx + 1:4d}/{101} | Loss: {loss.item():.4f}")
+        #if (batch_idx > 100):
+        #    break
     
     val_time = time.time() - val_start_time
     
@@ -308,9 +338,7 @@ def print_epoch_summary(epoch: int,
     
     print("="*70 + "\n")
 
-
 def main():
-    """Основная функция тренировки"""
     print("="*70)
     print("MEDICAL LSTM TRAINING")
     print("="*70)
@@ -327,13 +355,13 @@ def main():
     config['model_dir'].mkdir(exist_ok=True, parents=True)
     config['train_state_dir'].mkdir(exist_ok=True, parents=True)
     
-    # 1. Загрузка справочников
+    metrics_dir = config['train_state_dir'] / "metrics"
+    metrics_dir.mkdir(exist_ok=True, parents=True)
+    
     print("\n[1] Loading handbooks...")
     vocabs = aggregate_all_vocabs(str(config['handbooks_dir']))
-    
     print(f"    Loaded {len(vocabs)} vocabularies")
     
-    # 2. Загрузка статистики
     print("\n[2] Loading statistics...")
     train_tsv_path = config['datasets_dir'] / config['train_dataset']
     
@@ -353,7 +381,6 @@ def main():
             'is_dead': {'min': 0.0, 'max': 1.0}
         }
     
-    # 3. Создание датасетов
     print("\n[3] Creating datasets...")
     
     train_dataset = PatientSequenceDataset(
@@ -379,7 +406,6 @@ def main():
     print(f"    Train dataset ready")
     print(f"    Val dataset ready")
     
-    # 4. Создание DataLoader'ов
     print("\n[4] Creating dataloaders...")
     
     collate_func = FastCollate(vocabs, normalization_stats)
@@ -405,7 +431,6 @@ def main():
     print(f"    Train loader: {len(train_loader)} batches")
     print(f"    Val loader: {len(val_loader)} batches")
     
-    # 5. Инициализация модели
     print("\n[5] Initializing model...")
     
     model = MedicalLSTM(config).to(device)
@@ -414,7 +439,6 @@ def main():
     print(f"    Model: MedicalLSTM")
     print(f"    Parameters: {total_params:,} total, {trainable_params:,} trainable")
     
-    # 6. Инициализация оптимизатора и loss функции
     print("\n[6] Initializing optimizer...")
     
     optimizer = torch.optim.AdamW(
@@ -429,7 +453,6 @@ def main():
         loss_weights=config['loss_weights']
     ).to(device)
     
-    # ИСПРАВЛЕНО: Создаем GradScaler с правильными параметрами
     scaler = torch.amp.GradScaler(
         'cuda',
         init_scale=config['grad_scaler_init'],
@@ -438,7 +461,6 @@ def main():
     
     print(f"    Optimizer: AdamW, lr={config['learning_rate']}")
     
-    # 7. Загрузка состояния (если есть)
     print("\n[7] Checking checkpoint...")
     
     checkpoint_path = config['train_state_dir'] / "model_last_checkpoint.pkl"
@@ -451,7 +473,6 @@ def main():
     if checkpoint_path.exists():
         response = input("    Found checkpoint. Load? (y/n): ").lower()
         if response == 'y':
-            # ИСПРАВЛЕНО: Передаем scaler для сохранения состояния
             success, loaded_epoch, loaded_history, loaded_best_loss = load_training_state(
                 model, optimizer, scaler,
                 model_name="model_last",
@@ -470,7 +491,6 @@ def main():
     else:
         print(f"    No checkpoint found, starting from scratch")
     
-    # 8. Цикл тренировки
     print("\n" + "="*70)
     print("STARTING TRAINING")
     print("="*70)
@@ -485,11 +505,9 @@ def main():
         
         print(f"\n>>> EPOCH {epoch} <<<")
         
-        # Тренировка с scaler
         train_loss = train_epoch(model, train_loader, optimizer, loss_fn, 
                                 device, config, epoch, scaler)
         
-        # Валидация
         val_metrics = validate_epoch(model, val_loader, loss_fn, device, config, epoch)
         
         epoch_time = time.time() - epoch_start_time
@@ -505,21 +523,20 @@ def main():
         else:
             patience_counter += 1
         
-        print_epoch_summary(epoch, train_loss, val_metrics, is_best, epoch_time)
+        save_epoch_metrics(epoch, train_loss, val_metrics, epoch_time, is_best, metrics_dir)
         
         history = {
             'train': train_history,
             'val': val_history,
             'config': config,
-            'vocab_sizes': vocab_sizes,
+            'vocab_sizes': config['vocab_sizes'],
             'normalization_stats': normalization_stats
         }
         
-        # ИСПРАВЛЕНО: Сохраняем с scaler
         save_training_state(
             model=model,
             optimizer=optimizer,
-            scaler=scaler,  # Добавили scaler
+            scaler=scaler,
             epoch=epoch,
             history=history,
             best_val_loss=best_val_loss,
@@ -530,7 +547,7 @@ def main():
             save_training_state(
                 model=model,
                 optimizer=optimizer,
-                scaler=scaler,  # Добавили scaler
+                scaler=scaler,
                 epoch=epoch,
                 history=history,
                 best_val_loss=best_val_loss,
@@ -553,7 +570,7 @@ def main():
         best_epoch = np.argmin(val_history['loss'])
         print(f"\nBest epoch: {best_epoch}")
         
-        key_metrics = ['age_mae', 'death_recall', 'death_f1']
+        key_metrics = ['age_mae', 'age_r2', 'death_recall', 'death_f1']
         for metric in key_metrics:
             if metric in val_history and len(val_history[metric]) > best_epoch:
                 print(f"  {metric}: {val_history[metric][best_epoch]:.4f}")
@@ -561,7 +578,7 @@ def main():
     save_training_state(
         model=model,
         optimizer=optimizer,
-        scaler=scaler,  # Добавили scaler
+        scaler=scaler,
         epoch=epoch,
         history=history,
         best_val_loss=best_val_loss,
@@ -569,6 +586,7 @@ def main():
     )
     
     print(f"\n💾 Final model saved")
+    print(f"📊 All metrics saved to {metrics_dir}/training_metrics.json")
     print("="*70)
 
 
